@@ -9,6 +9,7 @@ import AdminDashboard from './components/AdminDashboard.tsx';
 import AdminLogin from './components/AdminLogin.tsx';
 import QRStudio from './components/QRStudio.tsx';
 import { Restaurant } from './types.ts';
+import { getFallbackMenuResponse } from './data/fallbackData.ts';
 import { UtensilsCrossed, QrCode, Lock, ArrowRight, Eye, ShieldCheck, X } from 'lucide-react';
 
 export default function App() {
@@ -50,14 +51,20 @@ export default function App() {
   // Open QR modal helper
   const handleShowQR = async (slug: string) => {
     try {
-      const res = await fetch(`/api/public/menu/${slug}`);
-      if (res.ok) {
+      const res = await fetch(`/api/public/menu/${slug}`).catch(() => null);
+      if (res && res.ok) {
         const data = await res.json();
         setQrModalRestaurant(data.restaurant);
         setQrModalSlug(slug);
+        return;
       }
+      const fallback = getFallbackMenuResponse(slug);
+      setQrModalRestaurant(fallback.restaurant);
+      setQrModalSlug(slug);
     } catch (e) {
-      console.error(e);
+      const fallback = getFallbackMenuResponse(slug);
+      setQrModalRestaurant(fallback.restaurant);
+      setQrModalSlug(slug);
     }
   };
 

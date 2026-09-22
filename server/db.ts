@@ -3,7 +3,10 @@ import fs from 'fs';
 import path from 'path';
 
 let dbInstance: Database | null = null;
-const DB_FILE = path.join(process.cwd(), 'database.sqlite');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const DB_FILE = isServerless
+  ? path.join('/tmp', 'database.sqlite')
+  : path.join(process.cwd(), 'database.sqlite');
 
 export async function getDb(): Promise<Database> {
   if (dbInstance) return dbInstance;
@@ -11,8 +14,12 @@ export async function getDb(): Promise<Database> {
   const SQL = await initSqlJs();
 
   if (fs.existsSync(DB_FILE)) {
-    const fileBuffer = fs.readFileSync(DB_FILE);
-    dbInstance = new SQL.Database(fileBuffer);
+    try {
+      const fileBuffer = fs.readFileSync(DB_FILE);
+      dbInstance = new SQL.Database(fileBuffer);
+    } catch {
+      dbInstance = new SQL.Database();
+    }
   } else {
     dbInstance = new SQL.Database();
   }
@@ -29,9 +36,13 @@ export async function getDb(): Promise<Database> {
 
 export function saveDb() {
   if (!dbInstance) return;
-  const data = dbInstance.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(DB_FILE, buffer);
+  try {
+    const data = dbInstance.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(DB_FILE, buffer);
+  } catch (err) {
+    console.warn('Could not write database to disk:', err);
+  }
 }
 
 function initSchema(db: Database) {

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { PublicMenuResponse, MenuItem, MealPeriod, Category } from '../types.ts';
 import { formatPrice, formatTimeRange, FALLBACK_FOOD_IMAGE, FALLBACK_RESTAURANT_COVER } from '../utils.ts';
+import { getFallbackMenuResponse } from '../data/fallbackData.ts';
 
 interface PublicMenuProps {
   slug: string;
@@ -39,44 +40,70 @@ export default function PublicMenu({ slug, onOpenAdmin, onShowQR }: PublicMenuPr
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/public/menu/${slug}`);
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          if (res.status === 404) {
-            setError({
-              title: errData.error || 'Menu not found.',
-              detail: errData.detail || 'The requested Ethiopian restaurant menu does not exist.'
-            });
-          } else if (res.status === 403) {
-            setError({
-              title: errData.error || 'This menu is currently unavailable.',
-              detail: errData.detail || 'The restaurant is currently inactive.'
-            });
-          } else {
-            setError({
-              title: 'Unable to load menu.',
-              detail: 'Please check your connection and try again.'
-            });
+        const res = await fetch(`/api/public/menu/${slug}`).catch(() => null);
+        
+        if (res && res.ok) {
+          const menuData: PublicMenuResponse = await res.json();
+          setData(menuData);
+          try {
+            localStorage.setItem(`ethio_menu_store_${slug}`, JSON.stringify(menuData));
+          } catch {
+            // Ignore storage errors
           }
+
+          if (menuData.activePeriodId) {
+            setSelectedPeriodId(menuData.activePeriodId);
+          } else if (menuData.mealPeriods.length > 0) {
+            setSelectedPeriodId(menuData.mealPeriods[0].id);
+          }
+          return;
+        }
+
+        // If explicitly 403 (inactive restaurant)
+        if (res && res.status === 403) {
+          const errData = await res.json().catch(() => ({}));
+          setError({
+            title: errData.error || 'This menu is currently unavailable.',
+            detail: errData.detail || 'The restaurant is currently inactive.'
+          });
           setData(null);
           return;
         }
 
-        const menuData: PublicMenuResponse = await res.json();
-        setData(menuData);
-
-        // Set default meal period from server recommendation or first available
-        if (menuData.activePeriodId) {
-          setSelectedPeriodId(menuData.activePeriodId);
-        } else if (menuData.mealPeriods.length > 0) {
-          setSelectedPeriodId(menuData.mealPeriods[0].id);
+        // Resilient fallback: If deployed on Vercel static mode, server cold-start, or offline
+        const fallback = getFallbackMenuResponse(slug);
+        if (fallback && (slug === 'habesha-restaurant' || fallback.restaurant.slug === slug || !slug)) {
+          setData(fallback);
+          if (fallback.activePeriodId) {
+            setSelectedPeriodId(fallback.activePeriodId);
+          } else if (fallback.mealPeriods.length > 0) {
+            setSelectedPeriodId(fallback.mealPeriods[0].id);
+          }
+          return;
         }
-      } catch (err) {
-        console.error('Failed to load menu:', err);
+
+        // Only show not found if it's a completely unknown slug with no fallback
         setError({
-          title: 'Connection error.',
-          detail: 'Unable to reach the server. Please check your internet connection.'
+          title: 'Menu not found.',
+          detail: 'The requested Ethiopian restaurant menu does not exist.'
         });
+        setData(null);
+      } catch (err) {
+        console.warn('Network error while loading menu, using local fallback:', err);
+        const fallback = getFallbackMenuResponse(slug);
+        if (fallback) {
+          setData(fallback);
+          if (fallback.activePeriodId) {
+            setSelectedPeriodId(fallback.activePeriodId);
+          } else if (fallback.mealPeriods.length > 0) {
+            setSelectedPeriodId(fallback.mealPeriods[0].id);
+          }
+        } else {
+          setError({
+            title: 'Connection error.',
+            detail: 'Unable to reach the server. Please check your internet connection.'
+          });
+        }
       } finally {
         setLoading(false);
       }
