@@ -1,0 +1,6 @@
+{
+  "name": "Ethiopian QR Digital Menu",
+  "description": "Digital Ethiopian restaurant menu platform with permanent QR codes, ETB pricing, and meal period management for Ethiopian restaurants.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
